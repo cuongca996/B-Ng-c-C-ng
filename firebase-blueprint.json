@@ -1,0 +1,142 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and military information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "rank": { "type": "string" },
+        "unit": { "type": "string" },
+        "unitId": { "type": "string" },
+        "role": { "type": "string" },
+        "avatarInitials": { "type": "string" },
+        "isAdmin": { "type": "boolean" },
+        "isCommander": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["online", "offline", "busy"] },
+        "lastSeen": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "rank", "unit"]
+    },
+    "Unit": {
+      "title": "Unit",
+      "description": "Military unit structure",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "parentId": { "type": "string" },
+        "level": { "type": "string" },
+        "type": { "type": "string" },
+        "commanderId": { "type": "string" },
+        "membersCount": { "type": "number" },
+        "scores": {
+          "type": "object",
+          "properties": {
+            "combat": { "type": "number" },
+            "inspection": { "type": "number" },
+            "hygiene": { "type": "number" },
+            "tasks": { "type": "number" },
+            "total": { "type": "number" }
+          }
+        }
+      },
+      "required": ["id", "name", "level", "type"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Military task or mission",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "assignedBy": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" },
+        "deadline": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "type": { "type": "string" },
+        "attachments": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "title", "assignedBy", "status"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "Chat metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "isGroup": { "type": "boolean" },
+        "unitId": { "type": "string" },
+        "commanderId": { "type": "string" },
+        "memberIds": { "type": "array", "items": { "type": "string" } },
+        "lastMsg": { "type": "string" },
+        "lastMsgTime": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "isGroup"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Individual chat message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "chatId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRank": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "attachments": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "chatId", "senderId", "text", "timestamp"]
+    },
+    "MilitaryDocument": {
+      "title": "MilitaryDocument",
+      "description": "Military document metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "type": { "type": "string" },
+        "size": { "type": "string" },
+        "date": { "type": "string" },
+        "uploaderId": { "type": "string" },
+        "uploaderName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "category", "type", "uploaderId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/units/{unitId}": {
+      "schema": "Unit",
+      "description": "Unit structure"
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Tasks and missions"
+    },
+    "/chats/{chatId}": {
+      "schema": "Chat",
+      "description": "Chat groups and private metadata"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a chat"
+    },
+    "/documents/{docId}": {
+      "schema": "MilitaryDocument",
+      "description": "Military documents"
+    }
+  }
+}

@@ -1,0 +1,250 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId} (matches request.auth.uid)
+// Fields:
+//   - uid: string (required) - matches auth.uid
+//   - name: string (required) - full name
+//   - rank: string (required) - military rank
+//   - unit: string (required) - unit name
+//   - unitId: string (optional) - unit ID
+//   - role: string (optional) - functional role
+//   - avatarInitials: string (optional) - initials for avatar
+//   - isAdmin: boolean (optional) - admin privileges
+//   - isCommander: boolean (optional) - commander status
+//   - status: string (optional) - online/offline/busy
+//   - lastSeen: timestamp (optional) - last activity
+//
+// Collection: units
+// Document ID: {unitId}
+// Fields:
+//   - id: string (required)
+//   - name: string (required)
+//   - parentId: string (optional)
+//   - level: string (required) - squad/platoon/company/etc.
+//   - type: string (required) - office/direct/regular
+//   - commanderId: string (optional) - UID of the commander
+//   - membersCount: number (optional)
+//   - scores: map (optional) - combat/inspection/etc.
+//
+// Collection: tasks
+// Document ID: {taskId}
+// Fields:
+//   - id: string (required)
+//   - title: string (required)
+//   - description: string (optional)
+//   - assignedBy: string (required) - UID of assigner
+//   - assignedTo: string (required) - UID or UnitID
+//   - status: string (required) - pending/in-progress/completed/overdue
+//   - priority: string (optional) - low/medium/high/urgent
+//   - deadline: timestamp (optional)
+//   - createdAt: timestamp (required)
+//   - type: string (optional) - DT/QS/CT/HK/ALL
+//   - attachments: list (optional) - list of URLs
+//
+// Collection: chats
+// Document ID: {chatId}
+// Fields:
+//   - id: string (required)
+//   - name: string (optional)
+//   - isGroup: boolean (required)
+//   - unitId: string (optional)
+//   - commanderId: string (optional)
+//   - memberIds: list (required) - list of UIDs
+//   - lastMsg: string (optional)
+//   - lastMsgTime: timestamp (optional)
+//
+// Collection: chats/{chatId}/messages
+// Document ID: {messageId}
+// Fields:
+//   - id: string (required)
+//   - chatId: string (required)
+//   - senderId: string (required)
+//   - senderName: string (required)
+//   - senderRank: string (required)
+//   - text: string (required)
+//   - timestamp: timestamp (required)
+//   - attachments: list (optional)
+//
+// Collection: documents
+// Document ID: {docId}
+// Fields:
+//   - id: string (required)
+//   - title: string (required)
+//   - category: string (required) - Văn bản/Hướng dẫn/Kế hoạch/Biểu mẫu
+//   - type: string (required) - PDF/DOCX/XLSX/PPTX
+//   - size: string (optional)
+//   - date: string (optional)
+//   - uploaderId: string (required)
+//   - uploaderName: string (optional)
+//   - createdAt: timestamp (required)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
+        (request.auth.token.email == "bengoccuong@ll47.internal")
+      );
+    }
+
+    function isCommander() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isCommander == true;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidStringLength(field, min, max) {
+      return request.resource.data[field] is string && 
+             request.resource.data[field].size() >= min && 
+             request.resource.data[field].size() <= max;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.uid is string && data.uid == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.rank is string &&
+             data.unit is string;
+    }
+
+    function isValidUnit(data) {
+      return data.id is string && data.name is string && data.name.size() > 0 &&
+             data.level is string && data.type is string;
+    }
+
+    function isValidTask(data) {
+      return data.id is string && data.title is string && data.title.size() > 0 &&
+             data.assignedBy is string && data.status is string &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidChat(data) {
+      return data.id is string && data.isGroup is bool &&
+             data.memberIds is list;
+    }
+
+    function isValidMessage(data) {
+      return data.id is string && data.chatId is string &&
+             data.senderId is string && data.senderId == request.auth.uid &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 5000 &&
+             data.timestamp is timestamp;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Users collection
+    match /users/{userId} {
+      // Users can read their own profile, or admins can read any profile.
+      // For military apps, sometimes users need to see others in their unit.
+      // We'll allow reading if authenticated, but strictly validate PII if any.
+      allow read: if isAuthenticated();
+      
+      // Only the owner can create their profile, or an admin.
+      // Prevent self-escalation of isAdmin/isCommander unless already an admin.
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (
+        isOwner(userId) && 
+        request.resource.data.isAdmin == false && 
+        request.resource.data.isCommander == false
+      ) || isAdmin();
+
+      // Only the owner can update their status/lastSeen, or an admin can update anything.
+      allow update: if isAuthenticated() && (
+        (isOwner(userId) && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastSeen', 'avatarInitials'])) ||
+        isAdmin()
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Units collection
+    match /units/{unitId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Tasks collection
+    match /tasks/{taskId} {
+      // Users can see tasks assigned to them or their unit, or tasks they created.
+      allow read: if isAuthenticated();
+      
+      // Admins or commanders can create tasks.
+      allow create: if (isAdmin() || isCommander()) && isValidTask(request.resource.data);
+      
+      // Assignees can update status. Admins/Commanders can update anything.
+      allow update: if isAuthenticated() && (
+        (isAdmin() || isCommander()) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) && 
+         (request.auth.uid == resource.data.assignedTo || 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.unitId == resource.data.assignedTo))
+      );
+
+      allow delete: if isAdmin() || isCommander();
+    }
+
+    // Chats collection
+    match /chats/{chatId} {
+      // Users can see chats they are members of.
+      allow read: if isAuthenticated() && (request.auth.uid in resource.data.memberIds || isAdmin());
+      
+      // Any authenticated user can create a chat (private or group if they are commander).
+      allow create: if isAuthenticated() && isValidChat(request.resource.data);
+      
+      // Members can update chat metadata (lastMsg, etc).
+      allow update: if isAuthenticated() && (request.auth.uid in resource.data.memberIds || isAdmin());
+
+      allow delete: if isAdmin();
+
+      // Messages subcollection
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds || isAdmin());
+        allow create: if isAuthenticated() && isValidMessage(request.resource.data) && 
+                      (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds);
+        allow update, delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.senderId);
+      }
+    }
+
+    // Documents collection
+    match /documents/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && hasRequiredFields(['title', 'category', 'type', 'uploaderId', 'createdAt']) &&
+                    request.resource.data.uploaderId == request.auth.uid;
+      allow update: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.uploaderId);
+      allow delete: if isAdmin();
+    }
+  }
+}

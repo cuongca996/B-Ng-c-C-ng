@@ -1,0 +1,21 @@
+{
+  "name": "Lực Lượng 47",
+  "short_name": "LL47",
+  "description": "Hệ thống Quản lý & Tác chiến Nội bộ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a2421",
+  "theme_color": "#2d3a35",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/army/192/192",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://picsum.photos/seed/army/512/512",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
